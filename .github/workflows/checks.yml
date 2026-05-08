@@ -1,0 +1,60 @@
+name: checks
+
+on:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate commit messages
+        uses: ./.github/actions/validate-commit-messages
+
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Python 3.13
+        run: uv python install 3.13
+
+      - name: Sync dependencies
+        run: uv sync --all-groups
+
+      - name: Lint (compile check)
+        run: uv run python -m compileall -q src tests
+
+      - name: Unit tests
+        env:
+          BLACKHOLE_MOCK_FUSE: "1"
+        run: uv run pytest tests -m unit -q --cov=blackhole --cov-report=term-missing --cov-report=xml:coverage-unit.xml
+
+      - name: Detect FUSE support
+        id: fuse
+        run: |
+          if command -v fusermount3 >/dev/null 2>&1 \
+            && [ -e /dev/fuse ] \
+            && uv run python -c "import fuse" >/dev/null 2>&1; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Integration tests
+        if: steps.fuse.outputs.available == 'true'
+        run: uv run python -m pytest tests/test_integration_mount.py -m integration -q --cov=blackhole --cov-report=term-missing --cov-report=xml:coverage-integration.xml
+
+      - name: Integration tests skipped (FUSE unavailable)
+        if: steps.fuse.outputs.available != 'true'
+        run: |
+          echo "Skipping integration tests: this runner has no usable FUSE support (fusermount3 + /dev/fuse + importable Python fuse bindings required)."
+          echo "Run integration tests on a FUSE-capable Linux host or self-hosted runner."
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            coverage-unit.xml
+            coverage-integration.xml

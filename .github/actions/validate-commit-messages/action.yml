@@ -1,0 +1,66 @@
+name: Validate commit messages
+description: Validate pull request commit messages against the repository policy.
+
+runs:
+  using: composite
+  steps:
+    - name: Validate commit messages
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        base="${{ github.event.pull_request.base.sha }}"
+        range="${base}..HEAD"
+        mapfile -t commits < <(git rev-list "$range")
+
+        if [[ ${#commits[@]} -eq 0 ]]; then
+          echo "No commits to validate"
+          exit 0
+        fi
+
+        header_re='^(feat|fix|chore|test|revert)\(([a-z0-9][a-z0-9,-]*)\): [^[:space:]].*[^.[:space:]]$'
+        bullet_re='^- [^[:space:]].*$'
+
+        fail() {
+          local sha="$1"
+          local reason="$2"
+          echo "commit message invalid for ${sha}: ${reason}" >&2
+          echo "required format:" >&2
+          echo "  <type>(<scope>): <summary>" >&2
+          echo >&2
+          echo "  - <bullet>" >&2
+          echo "  - <bullet>" >&2
+          echo >&2
+          echo "allowed types: feat|fix|chore|test|revert" >&2
+          exit 1
+        }
+
+        for sha in "${commits[@]}"; do
+          mapfile -t lines < <(git show -s --format=%B "$sha")
+
+          while (( ${#lines[@]} > 0 )) && [[ -z "${lines[-1]}" ]]; do
+            unset 'lines[-1]'
+          done
+
+          (( ${#lines[@]} > 0 )) || fail "$sha" "empty commit message"
+
+          header="${lines[0]}"
+          [[ "$header" =~ $header_re ]] || fail "$sha" "header must match '<type>(<scope>): <summary>'"
+
+          if (( ${#lines[@]} < 2 )); then
+            fail "$sha" "body is required and must be a bullet list"
+          fi
+
+          body_start=1
+          if [[ -z "${lines[1]}" ]]; then
+            body_start=2
+          fi
+
+          (( ${#lines[@]} > body_start )) || fail "$sha" "body is required"
+
+          for ((i=body_start; i<${#lines[@]}; i++)); do
+            line="${lines[i]}"
+            [[ -n "$line" ]] || fail "$sha" "blank lines are not allowed inside bullet list body"
+            [[ "$line" =~ $bullet_re ]] || fail "$sha" "each body line must be a one-line bullet '- <text>'"
+          done
+        done
