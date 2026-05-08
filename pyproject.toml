@@ -1,0 +1,37 @@
+[project]
+name = "blackhole"
+version = "1.0.0"
+description = "blackhole — FUSE overlay filesystem that serves reads from a configured source and discards writes (immutable reads, zero-persistence writes)."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+	"fusepy>=3.0.1",
+]
+
+authors = [
+	{ name = "Omar Ahmed", email = "omaremadeldin@hotmail.com" },
+]
+
+license = { text = "MIT" }
+
+keywords = ["fuse", "filesystem", "overlay", "read-only", "blackhole"]
+
+classifiers = [
+	"License :: OSI Approved :: MIT License",
+	"Programming Language :: Python :: 3 :: Only",
+	"Programming Language :: Python :: 3.13",
+	"Operating System :: POSIX :: Linux",
+]
+
+[project.scripts]
+blackhole = "blackhole.main:entrypoint"
+
+[dependency-groups]
+dev = [
+	"pytest>=9.0.3",
+	"pytest-cov>=7.1.0",
+	"python-debian>=1.1.0",
+]
+
+[tool.uv]
+package=true
